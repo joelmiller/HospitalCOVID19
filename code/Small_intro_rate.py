@@ -20,7 +20,7 @@ gamma_IA = 1./9
 q = 0.5  #probability of arriving into asymptomatic state rather than presymptomatic.
 
 ##POPULATION ARRANGEMENT##
-NumberPatients = 1000 #initial number of nonCovC patients
+NumberPatients = 100 #initial number of nonCovC patients
 #NumberCohorts = 1  #number of nCovC subcohorts
 #    Nhat = NumberPatients/NumberCohorts  #typical subCohort size
 #    b = Nhat/ave_nonCOVIDduration   #entry rate required to have the typical stay be ave_nonCOVIDduration and size be Nhat.
@@ -41,29 +41,32 @@ NumberPatients = 1000 #initial number of nonCovC patients
 ##TRANSMISSION PARAMETERS##
 
 
-c_P = 0.1# relative force of infection from general population I1 and IA to nCovC patients.
-c_H = 0.1# relative force of infection from general population infected to HCW.
-c_PP = 0.125# 
-c_HP = 0.25
-c_PH = 0.25 #relative force of infection from patients to HCWs in cohort compared to in general public
-c_HH = 0.125 # relative force of infection between HCWs in same cohort
+c_P = 0.01# relative force of infection from general population I1 and IA to nCovC patients.
+c_H = 0.01# relative force of infection from general population infected to HCW.
+c_PP = 0.5# 
+c_HP = 2
+c_PH = 2 #relative force of infection from patients to HCWs in cohort compared to in general public
+c_HH = 0.5 # relative force of infection between HCWs in same cohort
 
 
-omega = 0*0.05
+test_incoming_factor = 1 #the probability an exposed/infected patient will be identified and not admitted.
+       #if 1, then no infected individuals get through.  If 0, then there is no filter except for symptomatic infections.
+
+omega = 0.05
 gamma_Q = 1./14  #departure rate from quarantine
 ave_nonCOVIDduration = 14  #average hospital stay for non-COVID patient
 #print('fix line above')
 
-T=100 #end time
+T=180 #end time
 
 
 r''' We're ready to do the calculation
 '''
 
-ts, pop_state, pop_FOI, Health_Facility_States, PFOI, HFOI = simulate(
+ts, pop_state, pop_FOI, Health_Facility_States, PFOIs, HFOIs = simulate(
             lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, 
             gamma_IA, gamma_Q, q, c_H, c_P,c_PP, c_HP, c_PH, c_HH, NumberPatients, 
-            T, max_dt, ave_nonCOVIDduration, PatientsPerHCW=4)
+            T, max_dt, ave_nonCOVIDduration, PatientsPerHCW=4, test_incoming_factor=test_incoming_factor)
   
            
                     
@@ -122,16 +125,15 @@ plt.show()
 plt.figure(4)
 plt.clf()
 plt.plot(ts, pop_FOI, label = 'public FOI')
-
-plt.plot(ts, PFOI, '--', label = 'Patient FOI')
-plt.plot(ts, HFOI, '-.', label = 'HCW FOI')
+plt.plot(ts, PFOIs, '--', label = 'Patient FOI')
+plt.plot(ts, HFOIs, '-.', label = 'HCW FOI')
 plt.legend()
 plt.show()
 #print(HCW_nCovC_status)
 
 
 plt.figure(3)
-plt.savefig('better_PPE.png')
+plt.savefig('reduced_intro_rates.png')
 plt.figure(4)
-plt.savefig('better_PPE_FOI.png')
+plt.savefig('reduced_intro_rates_FOI.png')
             

@@ -3,7 +3,7 @@ import random
 import numpy as np
 
 
-class subCohort():
+class Cohort():
     '''This class handles a subcohort within the non-COVID-19 cohort.  
     It tracks how many people of each type there are.
      
@@ -61,11 +61,10 @@ class subCohort():
         
         self.cumulative_rate = []
         
-    def calculate_rates(self,  popS, popE, popI1, popIA, popR, poplambda, cohorts, #I1oH, IAoH, 
-                                CH, 
-                                CP, CPP, CHxP, CPHx, CHxHx, b, Nhat, lambda1, 
+    def calculate_rates(self,  popS, popE, popI1, popIA, popR, poplambda, #myCohort, #I1oH, IAoH, 
+                                CH, CP, CPP, CHxP, CPHx, CHxHx, b, Nhat, lambda1, 
                                 lambdaA, omega, gammaE, gammaI1, gammaI2, 
-                                gammaIA, gammaQ, q):
+                                gammaIA, gammaQ, q, test_incoming_factor=0):
                                 
         assert(lambdaA == lambda1)
         self.total_rate = 0
@@ -111,15 +110,19 @@ class subCohort():
         self.from_Q_rate = gammaQ*self.QH
 
         self.total_rate += self.to_Q_by_test_rate + self.to_Q_by_symptom_rate + self.from_Q_rate
-         
-        self.Sarrival_rate = b*popS/(popS+popE+popI1+popIA+popR)
-        self.Earrival_rate = b*popE/(popS+popE+popI1+popIA+popR)
-        self.I1arrival_rate = b*popI1/(popS+popE+popI1+popIA+popR)
-        self.IAarrival_rate = b*popIA/(popS+popE+popI1+popIA+popR)
-        self.Rarrival_rate = b*popR/(popS+popE+popI1+popIA+popR)
         
-        self.total_rate += self.Sarrival_rate + self.Earrival_rate + self.I1arrival_rate
-        self.total_rate += self.IAarrival_rate + self.Rarrival_rate 
+        arrival_weight = (popS+ popR)
+        arrival_weight += (1-test_incoming_factor)*(popE+popI1+popIA)
+            
+        self.Sarrival_rate = b*popS/arrival_weight
+        self.Rarrival_rate = b*popR/arrival_weight
+        
+        
+        self.Earrival_rate = (1-test_incoming_factor)*b*popE/arrival_weight
+        self.I1arrival_rate = (1-test_incoming_factor)*b*popI1/arrival_weight
+        self.IAarrival_rate = (1-test_incoming_factor)*b*popIA/arrival_weight
+        self.total_rate += self.IAarrival_rate + self.Earrival_rate + self.I1arrival_rate
+        self.total_rate += self.Sarrival_rate + self.Rarrival_rate 
 
         self.Sdeparture_rate = b*(self.SP)/Nhat
         self.Edeparture_rate = b*self.EP/Nhat
@@ -371,21 +374,20 @@ def dPublicdt(X, parameters):
 
 
 def simulate(lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, gamma_IA, gamma_Q,  q, 
-            c_H, c_P, c_PP, c_HxP, c_PHx, c_HxHx, NumberPatients, NumberCohorts, T, 
-            max_dt, ave_nonCOVIDduration, PatientsPerHCW):
+            c_H, c_P, c_PP, c_HxP, c_PHx, c_HxHx, NumberPatients, T, 
+            max_dt, ave_nonCOVIDduration, PatientsPerHCW, test_incoming_factor = 0):
             
     #oH_count = 0#initial number of CovC health care workers
     #oH_status = [oH_count, 0, 0, 0, 0, 0]  #S, E, I1, I2, IA, Rfor Covid-19 cohort of HCW
     K=0 
     #x_oHHx  
     
-    Nhat = NumberPatients/NumberCohorts  #typical subCohort size
+    Nhat = NumberPatients#/NumberCohorts  #typical subCohort size
     b = Nhat/ave_nonCOVIDduration   #entry rate required to have the typical stay be ave_nonCOVIDduration and size be Nhat.
     
     Hx_count = int(round(NumberPatients/PatientsPerHCW))  # number of HCW in nonCov cohort Assuming 4 patients/HCW
-    subCohorts = [subCohort(Hx_count/NumberCohorts,int(NumberPatients/NumberCohorts)) 
-                for n in range(NumberCohorts)]
-    #Hx_statuses = [[int(Hx_count/NumberCohorts), 0, 0, 0, 0, 0] for n in range(NumberCohorts)]
+    myCohort = Cohort(Hx_count,NumberPatients)
+    #HCW_statuses = [int(Hx_count/NumberCohorts), 0, 0, 0, 0, 0] 
     #HCW_nCovC_trans_rates = [[] for n in range(NumberCohorts)]
     
     #P_statuses = Patient_nCovC_status = [np.array([int(NumberPatients/NumberCohorts), 0, 0]) for n in range(NumberCohorts)]
@@ -399,9 +401,9 @@ def simulate(lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, g
     pop_FOI = []
     #oH_state = []
     #oH_FOI = []
-    Health_Facility_States = [[] for sCohort in subCohorts]
-    HCW_FOIs = [[] for sCohort in subCohorts]
-    P_FOIs = [[] for sCohort in subCohorts]
+    Health_Facility_States = [] 
+    HCW_FOIs = [] 
+    P_FOIs = [] 
     ts = []
     while t<T:
         #print(t)
@@ -409,20 +411,20 @@ def simulate(lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, g
         #SoH, EoH, I1oH, I2oH, IAoH, RoH= oH_status
         pop_state.append(Pop_status)
         #oH_state.append(oH_status)
-        for nonCOVstate, sCohort in zip(Health_Facility_States, subCohorts):
-            nonCOVstate.append([sCohort.SP, sCohort.EP, sCohort.I1P, sCohort.IAP, sCohort.RP, sCohort.SH, sCohort.EH, sCohort.I1H, sCohort.IAH, sCohort.QH, sCohort.RH])
+        #for nonCOVstate, sCohort in zip(Health_Facility_States, subCohorts):
+        Health_Facility_States.append([myCohort.SP, myCohort.EP, myCohort.I1P, myCohort.IAP, myCohort.RP, myCohort.SH, myCohort.EH, myCohort.I1H, myCohort.IAH, myCohort.QH, myCohort.RH])
         ts.append(t)
         poplambda = lambda_1 * I1 + lambda_2*I2 + lambda_A*IA
         
-        for sCohort in subCohorts:
-            sCohort.calculate_rates(S, E, I1, IA, R, poplambda, subCohorts, #I1oH, IAoH, 
+        #for sCohort in subCohorts:
+        myCohort.calculate_rates(S, E, I1, IA, R, poplambda, #myCohort, #I1oH, IAoH, 
                                     c_H, 
                                     c_P, c_PP, c_HxP, c_PHx, c_HxHx, b, Nhat, lambda_1, 
                                     lambda_A, omega, gamma_E, gamma_I1, gamma_I2, 
-                                    gamma_IA, gamma_Q, q)
+                                    gamma_IA, gamma_Q, q, test_incoming_factor)
             #print('NH', sCohort.NH)
         
-        total_rate = sum(sCohort.total_rate for sCohort in subCohorts)
+        total_rate = myCohort.total_rate# for sCohort in subCohorts)
     
         #This is where we do a Gillespie-like step.  We assume the general population
         #(which follows deterministic dynamics) is unchanging until the next Gillespie 
@@ -443,9 +445,9 @@ def simulate(lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, g
             #assert(FoHH==0)
             #deriv, FOI_oH = dCovC_HCW(oH_status, (c_H, lamb, K, c_HH, lambda_1, lambda_A, FoHH , gamma_E, gamma_I1, gamma_I2, gamma_IA, q))
             #oH_status =  oH_status + dt * deriv
-            for sCohort, PFOI, HFOI in zip(subCohorts, P_FOIs, HCW_FOIs):
-                PFOI.append(sCohort.to_EP_rate/sCohort.SP)
-                HFOI.append(sCohort.to_EH_rate/sCohort.SH)
+            #for sCohort, PFOI, HFOI in zip(subCohorts, P_FOIs, HCW_FOIs):
+            P_FOIs.append(myCohort.to_EP_rate/myCohort.SP)
+            HCW_FOIs.append(myCohort.to_EH_rate/myCohort.SH)
             #CH, lamb, K, CHH, lambda1, FoHH , gammaE, gammaI1, gammaI2, gammaIA, q= parameters
             #Events: arrival, transmission, transition, departure
         else:
@@ -457,19 +459,19 @@ def simulate(lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, g
             # deriv, FOI_oH = dCovC_HCW(oH_status, (c_H, lamb, K, c_HH, lambda_1, lambda_A, FoHH , gamma_E, gamma_I1, gamma_I2, gamma_IA, q))
             # oH_status +=  dt * deriv
             #CH, lamb, K, CHH, lambda1, FoHH , gammaE, gammaI1, gammaI2, gammaIA, q= parameters
-            for sCohort, PFOI, HFOI in zip(subCohorts, P_FOIs, HCW_FOIs):
-                PFOI.append(sCohort.to_EP_rate/sCohort.SP)
-                HFOI.append(sCohort.to_EH_rate/sCohort.SH)
-            r = random.random()*total_rate
-            for sCohort in subCohorts:
-                r-= sCohort.total_rate
-                if r<0:
-                    break
-            sCohort.do_action()
+            #for sCohort, PFOI, HFOI in zip(subCohorts, P_FOIs, HCW_FOIs):
+            P_FOIs.append(myCohort.to_EP_rate/myCohort.SP)
+            HCW_FOIs.append(myCohort.to_EH_rate/myCohort.SH)
+            #r = random.random()*total_rate
+            #for sCohort in subCohorts:
+            #    r-= sCohort.total_rate
+            #    if r<0:
+            #        break
+            myCohort.do_action()
         pop_FOI.append(FOI_Public)
 #        oH_FOI.append(FOI_oH)
-    print('len', len(P_FOIs), len(HCW_FOIs))
-    print(len(subCohorts))
+    #print('len', len(P_FOIs), len(HCW_FOIs))
+    #print(len(subCohorts))
     return ts, pop_state, pop_FOI, Health_Facility_States, P_FOIs, HCW_FOIs
     
     
@@ -539,7 +541,7 @@ if __name__ == '__main__':
     ts, pop_state, pop_FOI, Health_Facility_States, P_FOIs, HCW_FOIs = simulate(
             lambda_1, lambda_2, lambda_A, omega, gamma_E, gamma_I1, gamma_I2, 
             gamma_IA, gamma_Q, q, 
-            c_H, c_P,c_PP, c_HxP, c_PHx, c_HxHx, NumberPatients, NumberCohorts, 
+            c_H, c_P,c_PP, c_HxP, c_PHx, c_HxHx, NumberPatients, #NumberCohorts, 
             T, ave_nonCOVIDduration=ave_nonCOVIDduration, PatientsPerHCW=4)
                 
     #Patient_transmission_rates = [sum(L) for L in Patient_nCovC_trans_rates]
